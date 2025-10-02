@@ -1,0 +1,15 @@
+stages: [release]
+
+release:
+  image: node:20
+  stage: release
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+  script:
+    - npm ci
+    - npx semantic-release
+  variables:
+    GIT_AUTHOR_NAME: "CI"
+    GIT_AUTHOR_EMAIL: "ci@example.com"
+    GIT_COMMITTER_NAME: "CI"
+    GIT_COMMITTER_EMAIL: "ci@example.com"

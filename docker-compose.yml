@@ -1,0 +1,39 @@
+version: '3.9'
+
+services:
+  mock-jira:
+    build:
+      context: ./docker/mock-jira
+    environment:
+      - MOCK_JIRA_TOKEN=${JIRA_TOKEN:-mock-token}
+    ports:
+      - '8080:8080'
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          "node -e \"fetch('http://localhost:8080/health').then(r=>{if(!r.ok)process.exit(1);return r.json();}).then(()=>process.exit(0)).catch(()=>process.exit(1));\"",
+        ]
+      interval: 2s
+      timeout: 1s
+      retries: 15
+
+  semantic-release:
+    build:
+      context: ./docker
+    depends_on:
+      mock-jira:
+        condition: service_healthy
+    working_dir: /workspace
+    volumes:
+      - ./:/workspace
+      - semantic-release-node-modules:/workspace/node_modules
+    env_file:
+      - .env.local
+    environment:
+      JIRA_BASE_URL: ${JIRA_BASE_URL:-http://mock-jira:8080}
+      JIRA_TOKEN: ${JIRA_TOKEN:-mock-token}
+    command: ['npx', 'semantic-release', '--no-ci']
+
+volumes:
+  semantic-release-node-modules:

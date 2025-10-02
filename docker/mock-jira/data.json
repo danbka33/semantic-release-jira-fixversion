@@ -1,0 +1,38 @@
+{
+  "projects": {
+    "TEST": {
+      "versions": [
+        { "id": "1000", "name": "0.9.0", "released": false }
+      ]
+    }
+  },
+  "issues": {
+    "TEST-123": {
+      "key": "TEST-123",
+      "fields": {
+        "project": { "key": "TEST" },
+        "fixVersions": [],
+        "issuetype": { "name": "Story" }
+      },
+      "comments": [
+        { "id": "2000", "body": "Previous release comment" }
+      ],
+      "transitions": [
+        { "id": "31", "name": "Start Progress", "to": { "name": "In Progress" } },
+        { "id": "41", "name": "Closed", "to": { "name": "Closed" } }
+      ]
+    },
+    "TEST-456": {
+      "key": "TEST-456",
+      "fields": {
+        "project": { "key": "TEST" },
+        "fixVersions": [],
+        "issuetype": { "name": "Bug" }
+      },
+      "comments": [],
+      "transitions": [
+        { "id": "41", "name": "Closed", "to": { "name": "Closed" } }
+      ]
+    }
+  }
+}
