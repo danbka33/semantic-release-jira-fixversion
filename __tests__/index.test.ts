@@ -1,5 +1,30 @@
+import { ensureComment, ensureFixVersion, ensureTransition, ensureVersion } from '../src/actions.js';
 import plugin from '../src/index.js';
 import type { SemanticReleaseContext, SemanticReleaseLogger } from '../src/types.js';
+
+const mockJiraClient = {
+  getServerInfo: jest.fn(),
+  getIssue: jest.fn(),
+  getProjectVersions: jest.fn(),
+  createVersion: jest.fn(),
+  markVersionReleased: jest.fn(),
+  updateIssueFixVersions: jest.fn(),
+  getIssueComments: jest.fn(),
+  addIssueComment: jest.fn(),
+  getIssueTransitions: jest.fn(),
+  transitionIssue: jest.fn(),
+};
+
+jest.mock('../src/actions.js', () => ({
+  ensureComment: jest.fn(),
+  ensureFixVersion: jest.fn(),
+  ensureTransition: jest.fn(),
+  ensureVersion: jest.fn(),
+}));
+
+jest.mock('../src/jiraClient.js', () => ({
+  createJiraClient: jest.fn(() => mockJiraClient),
+}));
 
 const createLogger = (): jest.Mocked<SemanticReleaseLogger> => ({
   log: jest.fn(),
@@ -27,7 +52,12 @@ describe('success prerelease handling', () => {
   const originalEnv = process.env;
 
   beforeEach(() => {
-    jest.resetModules();
+    jest.clearAllMocks();
+    Object.values(mockJiraClient).forEach((fn) => {
+      if (typeof fn === 'function' && 'mockClear' in fn) {
+        fn.mockClear();
+      }
+    });
     process.env = {
       ...originalEnv,
       JIRA_BASE_URL: 'https://jira.example.com',
@@ -167,5 +197,72 @@ describe('success prerelease handling', () => {
     const context = createContext();
 
     await expect(plugin.success?.({}, context)).rejects.toThrow('jiraBaseUrl is not a valid URL');
+  });
+
+  it('warns and skips Jira updates when a project is unavailable', async () => {
+    const context = createContext({
+      branch: { prerelease: false },
+      nextRelease: { version: '1.0.0' },
+      commits: [{ message: 'fix: OLD-1' }, { message: 'feat: NEW-2' }],
+    });
+
+    mockJiraClient.getIssue.mockImplementation((key: string) => Promise.resolve({
+      key,
+      fields: {
+        project: { key: key.split('-')[0] },
+        issuetype: { name: 'Task' },
+        status: { name: 'To Do' },
+      },
+    }));
+
+    (ensureVersion as jest.Mock).mockImplementation((projectKey: string) => {
+      if (projectKey === 'OLD') {
+        const error = Object.assign(new Error('Project not found'), { status: 404 });
+        throw error;
+      }
+
+      return Promise.resolve({ id: 'new-version', name: '1.0.0' });
+    });
+    (ensureFixVersion as jest.Mock).mockResolvedValue(true);
+    (ensureComment as jest.Mock).mockResolvedValue(true);
+    (ensureTransition as jest.Mock).mockResolvedValue(true);
+
+    await plugin.success?.(undefined, context);
+
+    expect(context.logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('Skipping Jira updates for project OLD'),
+    );
+    expect(ensureFixVersion).toHaveBeenCalledTimes(1);
+    expect(ensureFixVersion).toHaveBeenCalledWith(
+      expect.objectContaining({ key: 'NEW-2' }),
+      expect.anything(),
+      expect.anything(),
+    );
+    expect(ensureComment).toHaveBeenCalledTimes(1);
+    expect(ensureTransition).toHaveBeenCalledTimes(1);
+  });
+
+  it('rethrows non-access ensureVersion errors', async () => {
+    const context = createContext({
+      branch: { prerelease: false },
+      nextRelease: { version: '1.0.0' },
+      commits: [{ message: 'fix: FAIL-1' }],
+    });
+
+    mockJiraClient.getIssue.mockResolvedValue({
+      key: 'FAIL-1',
+      fields: {
+        project: { key: 'FAIL' },
+        issuetype: { name: 'Task' },
+        status: { name: 'To Do' },
+      },
+    });
+
+    (ensureVersion as jest.Mock).mockImplementation(() => {
+      const error = Object.assign(new Error('Server exploded'), { status: 500 });
+      throw error;
+    });
+
+    await expect(plugin.success?.(undefined, context)).rejects.toThrow('Server exploded');
   });
 });

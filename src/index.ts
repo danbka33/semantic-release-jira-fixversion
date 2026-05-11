@@ -245,6 +245,7 @@ const success: SRPluginFunction = async (pluginConfig, context) => {
   }
 
   const projectVersions = new Map<string, JiraVersion>();
+  const failedProjects = new Set<string>();
   const actionContext = {
     client,
     options,
@@ -253,14 +254,37 @@ const success: SRPluginFunction = async (pluginConfig, context) => {
 
   for (const issue of issues) {
     const projectKey = issue.fields.project.key;
-    if (!projectVersions.has(projectKey)) {
+    if (projectVersions.has(projectKey) || failedProjects.has(projectKey)) {
+      continue;
+    }
+
+    try {
       const version = await ensureVersion(projectKey, versionName, actionContext);
       projectVersions.set(projectKey, version);
+    } catch (error) {
+      const status = (error as { status?: number }).status;
+      if (status === 404 || status === 403) {
+        const message = error instanceof Error ? error.message : String(error);
+        logger.warn(
+          `Skipping Jira updates for project ${projectKey} due to access error (status ${status ?? 'unknown'}): ${message}`,
+        );
+        failedProjects.add(projectKey);
+        continue;
+      }
+
+      throw error;
     }
   }
 
   for (const issue of issues) {
     const projectKey = issue.fields.project.key;
+    if (failedProjects.has(projectKey)) {
+      logger.warn(
+        `Skipping issue ${issue.key} because project ${projectKey} is unavailable for Jira updates.`,
+      );
+      continue;
+    }
+
     const version = projectVersions.get(projectKey);
     if (!version) {
       logger.warn(`No version cached for project ${projectKey}; skipping issue ${issue.key}`);
