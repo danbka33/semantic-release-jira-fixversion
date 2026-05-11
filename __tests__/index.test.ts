@@ -242,6 +242,49 @@ describe('success prerelease handling', () => {
     expect(ensureTransition).toHaveBeenCalledTimes(1);
   });
 
+  it('warns and skips Jira updates when a project is forbidden', async () => {
+    const context = createContext({
+      branch: { prerelease: false },
+      nextRelease: { version: '1.0.0' },
+      commits: [{ message: 'fix: FORBIDDEN-1' }, { message: 'feat: OK-2' }],
+    });
+
+    mockJiraClient.getIssue.mockImplementation((key: string) => Promise.resolve({
+      key,
+      fields: {
+        project: { key: key.split('-')[0] },
+        issuetype: { name: 'Task' },
+        status: { name: 'To Do' },
+      },
+    }));
+
+    (ensureVersion as jest.Mock).mockImplementation((projectKey: string) => {
+      if (projectKey === 'FORBIDDEN') {
+        const error = Object.assign(new Error('Forbidden'), { status: 403 });
+        throw error;
+      }
+
+      return Promise.resolve({ id: 'ok-version', name: '1.0.0' });
+    });
+    (ensureFixVersion as jest.Mock).mockResolvedValue(true);
+    (ensureComment as jest.Mock).mockResolvedValue(true);
+    (ensureTransition as jest.Mock).mockResolvedValue(true);
+
+    await plugin.success?.(undefined, context);
+
+    expect(context.logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('Skipping Jira updates for project FORBIDDEN'),
+    );
+    expect(ensureFixVersion).toHaveBeenCalledTimes(1);
+    expect(ensureFixVersion).toHaveBeenCalledWith(
+      expect.objectContaining({ key: 'OK-2' }),
+      expect.anything(),
+      expect.anything(),
+    );
+    expect(ensureComment).toHaveBeenCalledTimes(1);
+    expect(ensureTransition).toHaveBeenCalledTimes(1);
+  });
+
   it('rethrows non-access ensureVersion errors', async () => {
     const context = createContext({
       branch: { prerelease: false },

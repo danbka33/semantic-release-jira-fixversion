@@ -56,6 +56,7 @@ module.exports = {
         jiraBaseUrl: process.env.JIRA_BASE_URL,
         transitionName: 'Closed',
         markReleased: true,
+        // versionPrefix: 'bdd-integration-', // optional release name prefix
         // issueRegex: '([A-Z][A-Z0-9]+-\\d+)', // optional override
         // types: ['Bug', 'Story'],
       },
@@ -70,6 +71,12 @@ semantic-release passes the collected commits and the next release version to th
 2. Adds the version to the issue's `fixVersions` field (idempotent).
 3. Appends a stable release comment with marker `[#sr-jira:<version>]`.
 4. Transitions the issue to the configured state (defaults to `Closed`) when available.
+
+### Pre-releases
+
+When semantic-release marks a release as a pre-release (for example, channel `beta` or version `1.2.0-beta.1`),
+the plugin skips Jira updates entirely. Only full releases trigger version creation, fixVersions, comments, and
+transitions.
 
 ### Dry Run
 
@@ -91,6 +98,12 @@ Use the `types` option to restrict processing to specific Jira issue types (e.g.
 ### Custom Issue Regex
 
 Override the issue key detection with the `issueRegex` option (string). The default is `([A-Z][A-Z0-9]+-\d+)` and is applied case-insensitively.
+
+### Version Prefix
+
+Use the `versionPrefix` option to prepend a stable identifier to the release name (for example, to distinguish
+microservices in a monorepo). When set to `bdd-integration-` and the release version is `1.9.0`, the Jira version
+created and referenced will be `bdd-integration-1.9.0`. The default prefix is empty.
 
 ## GitLab CI Example
 
