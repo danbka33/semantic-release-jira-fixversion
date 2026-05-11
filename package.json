@@ -1,6 +1,6 @@
 {
-  "name": "@danbka33/semantic-release-jira-fixversion",
-  "version": "0.0.0",
+  "name": "semantic-release-jira-fixversion",
+  "version": "1.0.0",
   "type": "module",
   "description": "semantic-release plugin to sync releases with Jira Server",
   "main": "dist/index.js",
@@ -36,9 +36,6 @@
   "homepage": "https://github.com/danbka33/semantic-release-jira-fixversion#readme",
   "bugs": {
     "url": "https://github.com/danbka33/semantic-release-jira-fixversion/issues"
-  },
-  "publishConfig": {
-    "access": "public"
   },
   "dependencies": {
     "undici": "^7.16.0"

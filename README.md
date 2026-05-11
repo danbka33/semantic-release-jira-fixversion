@@ -1,4 +1,4 @@
-# @danbka33/semantic-release-jira-fixversion
+# semantic-release-jira-fixversion
 
 A production-ready [semantic-release](https://semantic-release.gitbook.io/) plugin that synchronizes releases with Jira Server/Data Center. The plugin automatically creates Jira Versions across affected projects, adds fixVersions and release comments to issues referenced in commits, and transitions them to "Closed" (configurable).
 
@@ -21,7 +21,7 @@ A production-ready [semantic-release](https://semantic-release.gitbook.io/) plug
 ## Installation
 
 ```bash
-npm install --save-dev @danbka33/semantic-release-jira-fixversion
+npm install --save-dev semantic-release-jira-fixversion
 ```
 
 ## Environment Variables
@@ -51,7 +51,7 @@ module.exports = {
     '@semantic-release/release-notes-generator',
     // ... other plugins (changelog, git, npm, etc.)
     [
-      '@danbka33/semantic-release-jira-fixversion',
+      'semantic-release-jira-fixversion',
       {
         jiraBaseUrl: process.env.JIRA_BASE_URL,
         transitionName: 'Closed',
