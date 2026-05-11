@@ -18,6 +18,25 @@ type SRPluginFunction = (
   context: SemanticReleaseContext,
 ) => Promise<void>;
 
+const isPrerelease = (context: SemanticReleaseContext, versionName: string): boolean => {
+  const channel = context.nextRelease?.channel;
+  const branchPrerelease = context.branch?.prerelease;
+
+  if (channel) {
+    return true;
+  }
+
+  if (branchPrerelease) {
+    return true;
+  }
+
+  if (/-/.test(versionName)) {
+    return true;
+  }
+
+  return false;
+};
+
 const resolveOptions = (
   pluginConfig: PluginOptions,
   context: SemanticReleaseContext,
@@ -152,20 +171,24 @@ const success: SRPluginFunction = async (pluginConfig, context) => {
     throw new Error('semantic-release did not provide nextRelease.version and no versionName override was supplied.');
   }
 
+  logResolvedOptions(options, logger, context, 'success', versionName);
+
+  if (isPrerelease(context, versionName)) {
+    logger.info('Detected pre-release %s; skipping Jira synchronization.', versionName);
+    return;
+  }
+
   if (!context.commits || context.commits.length === 0) {
-    logResolvedOptions(options, logger, context, 'success', versionName);
     logger.info('No commits provided by semantic-release; skipping Jira updates.');
     return;
   }
 
   const issueKeys = extractIssueKeys(context.commits, options.issueRegex);
   if (issueKeys.length === 0) {
-    logResolvedOptions(options, logger, context, 'success', versionName);
     logger.info('No Jira issue keys found in commits; nothing to do.');
     return;
   }
 
-  logResolvedOptions(options, logger, context, 'success', versionName);
   const client = buildClient(options, context);
   logger.info(
     `Processing ${issueKeys.length} Jira issues for release ${versionName}${options.dryRun ? ' (dry-run)' : ''}`,

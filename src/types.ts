@@ -19,9 +19,13 @@ export interface SemanticReleaseContext {
   options?: {
     dryRun?: boolean;
   };
+  branch?: {
+    prerelease?: string | boolean;
+  };
   commits?: SemanticReleaseCommit[];
   nextRelease?: {
     version?: string;
+    channel?: string | false;
   };
 }
 
@@ -101,4 +105,3 @@ export interface JiraClient {
   getIssueTransitions(issueKey: string): Promise<JiraTransition[]>;
   transitionIssue(issueKey: string, transitionId: string): Promise<void>;
 }
-
