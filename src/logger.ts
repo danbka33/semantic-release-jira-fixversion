@@ -36,5 +36,5 @@ export const createLogger = (context?: SemanticReleaseContext): Logger => {
 
 export const redact = (value: string | undefined | null): string => {
   if (!value) return '';
-  return `${value.slice(0, 3)}***`;
+  return '***';
 };

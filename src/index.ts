@@ -1,6 +1,7 @@
 import { ensureComment, ensureFixVersion, ensureTransition, ensureVersion } from './actions.js';
 import { createJiraClient } from './jiraClient.js';
-import { createLogger } from './logger.js';
+import { createLogger, redact } from './logger.js';
+import type { Logger } from './logger.js';
 import { extractIssueKeys } from './parse.js';
 import type {
   JiraIssue,
@@ -20,8 +21,10 @@ type SRPluginFunction = (
 const resolveOptions = (
   pluginConfig: PluginOptions,
   context: SemanticReleaseContext,
+  logger?: Logger,
 ): ResolvedPluginOptions => {
   const baseUrl = pluginConfig.jiraBaseUrl ?? process.env.JIRA_BASE_URL;
+  logger?.info('[resolveOptions] jiraBaseUrl raw="%s"', baseUrl ?? '<undefined>');
   if (!baseUrl) {
     throw new Error('jiraBaseUrl must be provided via options or JIRA_BASE_URL environment variable.');
   }
@@ -61,6 +64,42 @@ const resolveOptions = (
   };
 };
 
+const logResolvedOptions = (
+  options: ResolvedPluginOptions,
+  logger: Logger,
+  context: SemanticReleaseContext,
+  phase: 'verifyConditions' | 'success',
+  resolvedVersionName?: string,
+): void => {
+  logger.info(
+    '[%s] Jira plugin configuration: baseUrl=%s authMode=%s transition=%s markReleased=%s dryRun=%s timeoutMs=%d maxRetries=%d',
+    phase,
+    options.jiraBaseUrl,
+    options.authMode,
+    options.transitionName,
+    options.markReleased,
+    options.dryRun,
+    options.timeout,
+    options.maxRetries,
+  );
+
+  logger.info(
+    '[%s] Release context: versionName=%s issueRegex=%s types=%s',
+    phase,
+    resolvedVersionName ?? options.versionName ?? context.nextRelease?.version ?? '<unknown>',
+    options.issueRegex.source,
+    options.types?.join(', ') ?? 'all',
+  );
+
+  logger.debug(
+    '[%s] Jira credentials (redacted): token=%s username=%s password=%s',
+    phase,
+    redact(options.token),
+    redact(options.username),
+    redact(options.password),
+  );
+};
+
 const buildClient = (options: ResolvedPluginOptions, context: SemanticReleaseContext) =>
   createJiraClient({
     baseUrl: options.jiraBaseUrl,
@@ -87,8 +126,9 @@ const validateAuth = (options: ResolvedPluginOptions): void => {
 
 const verifyConditions: SRPluginFunction = async (pluginConfig, context) => {
   const logger = createLogger(context);
-  const options = resolveOptions(pluginConfig ?? {}, context);
+  const options = resolveOptions(pluginConfig ?? {}, context, logger);
   validateAuth(options);
+  logResolvedOptions(options, logger, context, 'verifyConditions');
   logger.info('Verifying Jira configuration at %s with auth mode %s', options.jiraBaseUrl, options.authMode);
 
   try {
@@ -104,7 +144,7 @@ const verifyConditions: SRPluginFunction = async (pluginConfig, context) => {
 
 const success: SRPluginFunction = async (pluginConfig, context) => {
   const logger = createLogger(context);
-  const options = resolveOptions(pluginConfig ?? {}, context);
+  const options = resolveOptions(pluginConfig ?? {}, context, logger);
   validateAuth(options);
 
   const versionName = options.versionName ?? context.nextRelease?.version;
@@ -113,16 +153,19 @@ const success: SRPluginFunction = async (pluginConfig, context) => {
   }
 
   if (!context.commits || context.commits.length === 0) {
+    logResolvedOptions(options, logger, context, 'success', versionName);
     logger.info('No commits provided by semantic-release; skipping Jira updates.');
     return;
   }
 
   const issueKeys = extractIssueKeys(context.commits, options.issueRegex);
   if (issueKeys.length === 0) {
+    logResolvedOptions(options, logger, context, 'success', versionName);
     logger.info('No Jira issue keys found in commits; nothing to do.');
     return;
   }
 
+  logResolvedOptions(options, logger, context, 'success', versionName);
   const client = buildClient(options, context);
   logger.info(
     `Processing ${issueKeys.length} Jira issues for release ${versionName}${options.dryRun ? ' (dry-run)' : ''}`,
