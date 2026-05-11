@@ -6,6 +6,7 @@ const baseOptions: ResolvedPluginOptions = {
   issueRegex: /ABC/,
   transitionName: 'Closed',
   markReleased: true,
+  versionPrefix: '',
   dryRun: false,
   authMode: 'bearer',
   timeout: 1000,

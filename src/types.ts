@@ -35,6 +35,7 @@ export interface PluginOptions {
   transitionName?: string;
   markReleased?: boolean;
   versionName?: string;
+  versionPrefix?: string;
   types?: string[];
   dryRun?: boolean;
   authMode?: AuthMode;
@@ -46,6 +47,7 @@ export interface ResolvedPluginOptions {
   transitionName: string;
   markReleased: boolean;
   versionName?: string;
+  versionPrefix: string;
   types?: string[];
   dryRun: boolean;
   authMode: AuthMode;

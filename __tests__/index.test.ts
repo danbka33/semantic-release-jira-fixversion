@@ -99,4 +99,73 @@ describe('success prerelease handling', () => {
       'No commits provided by semantic-release; skipping Jira updates.',
     );
   });
+
+  it('applies versionPrefix to the resolved release version in logs', async () => {
+    const context = createContext({
+      commits: [],
+      nextRelease: { version: '1.0.0' },
+    });
+
+    await plugin.success?.({ versionPrefix: 'release-' }, context);
+
+    expect(context.logger.log).toHaveBeenCalledWith(
+      '[%s] Release context: versionName=%s issueRegex=%s types=%s',
+      'success',
+      'release-1.0.0',
+      '([A-Z][A-Z0-9]+-\\d+)',
+      'all',
+    );
+  });
+
+  it('does not duplicate versionPrefix when version already starts with it', async () => {
+    const context = createContext({
+      commits: [],
+      nextRelease: { version: 'release-1.0.0' },
+    });
+
+    await plugin.success?.({ versionPrefix: 'release-' }, context);
+
+    expect(context.logger.log).toHaveBeenCalledWith(
+      '[%s] Release context: versionName=%s issueRegex=%s types=%s',
+      'success',
+      'release-1.0.0',
+      '([A-Z][A-Z0-9]+-\\d+)',
+      'all',
+    );
+  });
+
+  it('normalizes jiraBaseUrl by trimming and removing trailing slashes', async () => {
+    process.env.JIRA_BASE_URL = '  https://jira.example.com///  ';
+    const context = createContext({
+      commits: [],
+      nextRelease: { version: '1.0.0' },
+    });
+
+    await plugin.success?.({}, context);
+
+    expect(context.logger.log).toHaveBeenCalledWith(
+      '[resolveOptions] jiraBaseUrl raw="%s" trimmed="%s"',
+      '  https://jira.example.com///  ',
+      'https://jira.example.com///',
+    );
+    expect(context.logger.log).toHaveBeenCalledWith(
+      '[%s] Jira plugin configuration: baseUrl=%s authMode=%s transition=%s markReleased=%s dryRun=%s timeoutMs=%d maxRetries=%d versionPrefix=%s',
+      'success',
+      'https://jira.example.com',
+      'bearer',
+      'Closed',
+      true,
+      false,
+      10000,
+      5,
+      '<empty>',
+    );
+  });
+
+  it('throws when jiraBaseUrl is not a valid URL', async () => {
+    process.env.JIRA_BASE_URL = 'not a valid url';
+    const context = createContext();
+
+    await expect(plugin.success?.({}, context)).rejects.toThrow('jiraBaseUrl is not a valid URL');
+  });
 });

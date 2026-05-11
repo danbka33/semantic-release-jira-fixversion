@@ -12,6 +12,7 @@ import type {
 } from './types.js';
 
 const DEFAULT_REGEX_SOURCE = '([A-Z][A-Z0-9]+-\\d+)';
+const DEFAULT_VERSION_PREFIX = '';
 
 type SRPluginFunction = (
   pluginConfig: PluginOptions | undefined,
@@ -42,10 +43,24 @@ const resolveOptions = (
   context: SemanticReleaseContext,
   logger?: Logger,
 ): ResolvedPluginOptions => {
-  const baseUrl = pluginConfig.jiraBaseUrl ?? process.env.JIRA_BASE_URL;
-  logger?.info('[resolveOptions] jiraBaseUrl raw="%s"', baseUrl ?? '<undefined>');
+  const rawBaseUrl = pluginConfig.jiraBaseUrl ?? process.env.JIRA_BASE_URL;
+  const baseUrl = rawBaseUrl?.trim();
+  logger?.info(
+    '[resolveOptions] jiraBaseUrl raw="%s" trimmed="%s"',
+    rawBaseUrl ?? '<undefined>',
+    baseUrl ?? '<undefined>',
+  );
   if (!baseUrl) {
     throw new Error('jiraBaseUrl must be provided via options or JIRA_BASE_URL environment variable.');
+  }
+
+  let normalizedBaseUrl: string;
+  try {
+    const parsed = new URL(baseUrl);
+    normalizedBaseUrl = parsed.toString().replace(/\/+$/, '');
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`jiraBaseUrl is not a valid URL: ${message}`);
   }
 
   const regexSource = pluginConfig.issueRegex ?? DEFAULT_REGEX_SOURCE;
@@ -56,6 +71,7 @@ const resolveOptions = (
   const dryRun = pluginConfig.dryRun ?? Boolean(context.options?.dryRun);
   const authModeEnv = process.env.JIRA_AUTH_MODE as ResolvedPluginOptions['authMode'] | undefined;
   const authMode = pluginConfig.authMode ?? authModeEnv ?? 'bearer';
+  const versionPrefix = pluginConfig.versionPrefix ?? DEFAULT_VERSION_PREFIX;
 
   const timeoutValue = Number(process.env.JIRA_TIMEOUT_MS ?? 10000);
   const timeout = Number.isFinite(timeoutValue) ? timeoutValue : 10000;
@@ -67,11 +83,12 @@ const resolveOptions = (
   const password = process.env.JIRA_PASSWORD;
 
   return {
-    jiraBaseUrl: baseUrl,
+    jiraBaseUrl: normalizedBaseUrl,
     issueRegex,
     transitionName,
     markReleased,
     versionName: pluginConfig.versionName,
+    versionPrefix,
     types: pluginConfig.types,
     dryRun,
     authMode,
@@ -91,7 +108,7 @@ const logResolvedOptions = (
   resolvedVersionName?: string,
 ): void => {
   logger.info(
-    '[%s] Jira plugin configuration: baseUrl=%s authMode=%s transition=%s markReleased=%s dryRun=%s timeoutMs=%d maxRetries=%d',
+    '[%s] Jira plugin configuration: baseUrl=%s authMode=%s transition=%s markReleased=%s dryRun=%s timeoutMs=%d maxRetries=%d versionPrefix=%s',
     phase,
     options.jiraBaseUrl,
     options.authMode,
@@ -100,6 +117,7 @@ const logResolvedOptions = (
     options.dryRun,
     options.timeout,
     options.maxRetries,
+    options.versionPrefix || '<empty>',
   );
 
   logger.info(
@@ -143,11 +161,22 @@ const validateAuth = (options: ResolvedPluginOptions): void => {
   }
 };
 
+const applyVersionPrefix = (versionName: string, versionPrefix: string): string => {
+  if (!versionPrefix) {
+    return versionName;
+  }
+
+  return versionName.startsWith(versionPrefix) ? versionName : `${versionPrefix}${versionName}`;
+};
+
 const verifyConditions: SRPluginFunction = async (pluginConfig, context) => {
   const logger = createLogger(context);
   const options = resolveOptions(pluginConfig ?? {}, context, logger);
   validateAuth(options);
-  logResolvedOptions(options, logger, context, 'verifyConditions');
+  const rawVersionName = pluginConfig?.versionName ?? context.nextRelease?.version;
+  const resolvedVersionName =
+    rawVersionName !== undefined ? applyVersionPrefix(rawVersionName, options.versionPrefix) : undefined;
+  logResolvedOptions(options, logger, context, 'verifyConditions', resolvedVersionName);
   logger.info('Verifying Jira configuration at %s with auth mode %s', options.jiraBaseUrl, options.authMode);
 
   try {
@@ -163,18 +192,19 @@ const verifyConditions: SRPluginFunction = async (pluginConfig, context) => {
 
 const success: SRPluginFunction = async (pluginConfig, context) => {
   const logger = createLogger(context);
-  const options = resolveOptions(pluginConfig ?? {}, context, logger);
-  validateAuth(options);
-
-  const versionName = options.versionName ?? context.nextRelease?.version;
-  if (!versionName) {
+  const rawVersionName = pluginConfig?.versionName ?? context.nextRelease?.version;
+  if (!rawVersionName) {
     throw new Error('semantic-release did not provide nextRelease.version and no versionName override was supplied.');
   }
 
+  const options = resolveOptions(pluginConfig ?? {}, context, logger);
+  validateAuth(options);
+  const versionName = applyVersionPrefix(rawVersionName, options.versionPrefix);
+
   logResolvedOptions(options, logger, context, 'success', versionName);
 
-  if (isPrerelease(context, versionName)) {
-    logger.info('Detected pre-release %s; skipping Jira synchronization.', versionName);
+  if (isPrerelease(context, rawVersionName)) {
+    logger.info('Detected pre-release %s; skipping Jira synchronization.', rawVersionName);
     return;
   }
 
