@@ -39,7 +39,7 @@
     "url": "https://github.com/danbka33/semantic-release-jira-fixversion/issues"
   },
   "dependencies": {
-    "undici": "^7.16.0"
+    "undici": "^8.9.0"
   },
   "devDependencies": {
     "@semantic-release/commit-analyzer": "^13.0.1",
